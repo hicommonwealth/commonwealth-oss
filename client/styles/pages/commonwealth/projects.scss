@@ -1,82 +1,149 @@
 @import 'client/styles/shared';
 
 .ProjectsPage {
-    .cui-card {
-        padding-top: 28px;
-        margin-top: 24px;
-        max-width: none;
-        @include lg-min {
-            max-width: calc(50% - 20px);
-            margin-right: 20px;
-        }
-    }
-    h4 {
-        font-size: 24px;
-        font-weight: 700;
-        margin-bottom: 2px;
-    }
-    .project-description {
-        color: $text-color-medium;
-        margin-bottom: 5px;
-        line-height: 1.2;
-    }
-    .project-metadata {
+    .stats-box {
+        margin-top: 20px;
         margin-bottom: 20px;
-        .project-metadata-created,
-        .project-metadata-beneficiary {
-            display: inline-block;
-        }
-        .project-metadata-beneficiary {
-            color: $text-color-medium;
-            margin-right: 18px;
-        }
-        .project-metadata-created {
-            color: $text-color-medium;
-        }
+        padding: 24px 20px 20px;
+        border-radius: 10px;
+        background-color: #f8f8f8;
     }
-    .project-metrics {
-        display: flex;
-        .project-metric {
-            flex: 1;
-            padding: 16px 0 10px;
+    .projects-row {
+        display: block;
+        margin-top: 30px;
+        width: 100%;
+
+        .project-description {
+            color: $text-color-medium;
+            margin-bottom: 5px;
+            line-height: 1.2;
+            margin-top: 5px;
+    
+            display: -webkit-box;
+            max-width: 100%;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
-        .project-metric-figure {
-            width: 120px;
-            font-size: 24px;
-            line-height: 1;
+        .project-metadata {
+            margin-bottom: 20px;
+            .project-metadata-created,
+            .project-metadata-beneficiary {
+                display: inline-block;
+            }
+            .project-metadata-beneficiary {
+                color: $text-color-medium;
+                margin-right: 18px;
+            }
+            .project-metadata-created {
+                color: $text-color-medium;
+            }
         }
-        .project-metric-title {
-        }
-    }
-    .project-progress {
-        padding: 4px 0 8px;
-        $progress-bar-height: 11px;
-        .project-progress-bar {
-            width: 100%;
-            height: $progress-bar-height;
-            border-radius: 9999px;
-            background-color: $background-color-medium-light;
-        }
-        .project-progress-bar-fill {
-            height: $progress-bar-height;
-            border-radius: 9999px;
-            background-color: $positive-bg-color;
-        }
-        .project-progress-text {
+        .project-metrics {
             display: flex;
-            padding-top: 12px;
-            padding-bottom: 12px;
-            color: $text-color-medium;
-            .project-progress-text-left {
+            .project-metric {
                 flex: 1;
+                padding: 16px 0 10px;
             }
-            .project-progress-text-right {
-                text-align: right;
+            .project-metric-figure {
+                width: 120px;
+                font-size: 24px;
+                line-height: 1;
+            }
+            .project-metric-title {
             }
         }
+
     }
-    .contribute-button,
-    .more-info-button {
-        margin-bottom: 8px;
+}
+
+.ProjectPage {
+    .content-area {
+        flex-grow: 1;
+        margin-top: 36px;
+        padding-right: 20px;
+        padding-left: 0px;
+        .project-name {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        .project-text {
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .project-description {
+            font-size: 18px;
+            margin-top: 10px;
+            // max-width: 90%;
+        }
+    }
+    .action-area {
+        margin: 36px auto;
+        // max-width: 400px;
+        width: 100%;
+        display: block;
+        padding: 40px 20px 30px;
+        border-radius: 10px;
+        background-color: #f8f8f8;
+
+        .action-title {
+            .amount {
+                font-size: 20px;
+                font-weight: 700;
+            }
+            .coin {
+                font-size: 14px;
+            }
+        }
+        .project-progress {
+            padding-bottom: 20px;
+            margin-top: 5px;
+            $progress-bar-height: 11px;
+            .project-progress-bar {
+                width: 100%;
+                height: $progress-bar-height;
+                border-radius: 9999px;
+                background-color: $background-color-medium-light;
+            }
+            .project-progress-bar-fill {
+                height: $progress-bar-height;
+                border-radius: 9999px;
+                background-color: $positive-bg-color;
+            }
+        }
+        .project-funding-action {
+            .contribute-button {
+                // margin-bottom: 10px;
+                margin-top: 10px;
+            }
+        }
+        .error {
+            color: red;
+            text-align: center;
+            margin-bottom: 0;
+            margin-top: 5px;
+        }
+    }
+    .members-area {
+        background-color: #f8f8f8;
+        padding: 20px 20px 40px 20px;
+        margin-top: 30px;;
+        border-radius: 10px;
+        .member {
+            display: flex;
+            justify-content: space-between;
+        }
+        .title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 20px;
+        }
+        .text {
+            font-size: 16px;
+            color: #4a4a4a;
+        }
+        .mt-10px {
+            margin-top: 10px;
+        }
     }
 }
