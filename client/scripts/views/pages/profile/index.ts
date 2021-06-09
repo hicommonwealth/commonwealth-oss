@@ -330,6 +330,7 @@ const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProf
 
     const { setIdentity } = vnode.attrs;
     const { account, loaded, loading, refreshProfile } = vnode.state;
+
     if (!loading && !loaded) {
       loadProfile();
     }

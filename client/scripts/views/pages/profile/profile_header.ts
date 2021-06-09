@@ -17,6 +17,7 @@ import { confirmationModalWithText } from 'views/modals/confirm_modal';
 import PageLoading from 'views/pages/loading';
 import LoginWithWalletDropdown from 'views/components/login_with_wallet_dropdown';
 import { formatAddressShort } from '../../../../../shared/utils';
+import OnboardingModal from '../../modals/onboarding_modal/index';
 
 const editIdentityAction = (account, currentIdentity: SubstrateIdentity, vnode) => {
   const chainObj = app.config.chains.getById(account.chain);
@@ -76,10 +77,20 @@ export interface IProfileHeaderState {
 }
 
 const ProfileHeader: m.Component<IProfileHeaderAttrs, IProfileHeaderState> = {
+  oninit: (vnode) => {
+    const { account } = vnode.attrs;
+    const step = m.route.param('step');
+    const joiningCommunity = m.route.param('joiningCommunity');
+    const joiningChain = m.route.param('joiningChain');
+    if (step) {
+      app.modals.removeAll();
+      app.modals.create({ modal: OnboardingModal, data: { joiningCommunity, joiningChain, address: account.address, step } });
+    }
+  },
   view: (vnode) => {
     const { account, refreshCallback, onOwnProfile, onLinkedProfile } = vnode.attrs;
     const showJoinCommunityButton = vnode.attrs.setIdentity && !onOwnProfile;
-    const isClaimable = !account || !account.profile || account.profile.isEmpty;
+    const isClaimable = !account || !account.profile;
 
     const joinCommunity = async () => {
       if (!app.activeChainId() || onOwnProfile) return;
@@ -134,17 +145,19 @@ const ProfileHeader: m.Component<IProfileHeaderAttrs, IProfileHeaderState> = {
             }, 'Copy address'),
             vnode.state.copied && m('span.copy-done', 'Copied'),
             m('.space'),
-            isClaimable && m(LoginWithWalletDropdown, {
-              prepopulateAddress: account.address,
-              loggingInWithAddress: !app.isLoggedIn(),
-              joiningCommunity: app.activeCommunityId(),
-              joiningChain: app.activeChainId(),
-              label: 'Claim address',
-            }),
           ]),
         ]),
         m('.bio-actions-breakpoint'),
         m('.bio-actions', [
+          isClaimable && m(Button, {
+            intent: 'primary',
+            rounded: true,
+            class: '',
+            onclick: () => {
+              app.modals.create({ modal: OnboardingModal, data: { joiningCommunity: app.activeCommunityId(), joiningChain: app.activeChainId(), address: account.address } });
+            },
+            label: 'Claim Address'
+          }),
           onOwnProfile ? [
             editIdentityAction(account, vnode.state.identity, vnode),
             m(Button, {

@@ -490,15 +490,44 @@ const LinkNewAddressModal: m.Component<ILinkNewAddressModalAttrs, ILinkNewAddres
             name: 'Address',
             fluid: true,
             autocomplete: 'off',
-            value: vnode.attrs.prepopulateAddress,
-            placeholder: vnode.attrs.prepopulateAddress
-              ? undefined
-              : app.chain.base === ChainBase.Substrate
-                ? 'Paste the address here (e.g. 5Dvq...)'
-                : 'Paste the address here',
+            placeholder: app.chain.base === ChainBase.Substrate ? 'Paste the address here (e.g. 5Dvq...)'
+              : 'Paste the address here',
             oninput: async (e) => {
               const address = (e.target as any).value;
-              cliAddressInputFn(address);
+              vnode.state.error = null;
+              vnode.state.enteredAddress = address;
+
+              // Prevent validation on empty field
+              if (address === '') {
+                return;
+              }
+
+              if ((app.chain.base === ChainBase.Substrate)) {
+                if (isU8a(address) || isHex(address)) {
+                  vnode.state.error = 'Address must be SS58 (e.g. 5Ew4...)';
+                }
+                try {
+                  (await import('@polkadot/keyring')).decodeAddress(address);
+                } catch (err) {
+                  vnode.state.error = 'Invalid address';
+                }
+              }
+              if (app.user.activeAccounts.find((acct) => acct.address === address)) {
+                vnode.state.error = 'You have already linked this address';
+              }
+
+              if (!vnode.state.error) {
+                try {
+                  vnode.state.newAddress = await createUserWithAddress(AddressSwapper({
+                    address,
+                    currentPrefix: (app.chain as Substrate).chain.ss58Format,
+                  }), vnode.state.isEd25519 ? 'ed25519' : undefined, targetCommunity);
+                } catch (err) {
+                  vnode.state.error = err.responseJSON ? err.responseJSON.error : 'Failed to create user.';
+                }
+              }
+
+              m.redraw();
             },
           }),
           // // ed25519 account linking disabled for now, since while address ownership verification works,
