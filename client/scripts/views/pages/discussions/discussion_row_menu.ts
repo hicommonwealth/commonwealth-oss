@@ -29,8 +29,8 @@ export const ThreadSubscriptionMenuItem: m.Component<{ proposal: OffchainThread 
         e.preventDefault();
         if (!commentSubscription || !reactionSubscription) {
           await Promise.all([
-            app.user.notifications.subscribe(NotificationCategories.NewReaction, proposal.uniqueIdentifier),
-            app.user.notifications.subscribe(NotificationCategories.NewComment, proposal.uniqueIdentifier),
+            app.user.notifications.subscribe(NotificationCategories.NewReaction, proposal.uniqueIdentifier, false),
+            app.user.notifications.subscribe(NotificationCategories.NewComment, proposal.uniqueIdentifier, false),
           ]);
           notifySuccess('Subscribed!');
         } else if (bothActive) {

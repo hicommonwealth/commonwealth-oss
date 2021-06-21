@@ -21,9 +21,17 @@ export default async (models, req: Request, res: Response, next: NextFunction) =
   }
 
   let obj;
-  const parsed_object_id = req.body.object_id.split(/-|_/);
-  const p_id = parsed_object_id[1];
-  const p_entity = parsed_object_id[0];
+  //
+  let p_id, p_entity;
+  if (req.body.is_erc20) {
+    p_entity = req.body.object_id.substr(0, req.body.object_id.lastIndexOf('-'));
+    p_id = req.body.object_id.substr(req.body.object_id.lastIndexOf('-') + 1);
+  } else {
+    const parsed_object_id = req.body.object_id.split(/-|_/);
+    p_id = parsed_object_id[1];
+    p_entity = parsed_object_id[0];
+  }
+
   let chain;
 
   switch (category.name) {
@@ -85,14 +93,31 @@ export default async (models, req: Request, res: Response, next: NextFunction) =
           id: req.body.object_id,
         }
       });
-      if (!chainEventType) return next(new Error(Errors.InvalidChainEventId));
-      obj = { chain_id: p_entity, chain_event_type_id: req.body.object_id };
+      if (!chainEventType) {
+        // Check to see if it's ERC20 transfer
+        if (req.body.category === 'chain-event'
+          && req.body.is_erc20 && p_id === 'transfer') {
+          const node = await models.Chain.findOne({ chain: req.body.chain_id, type: 'token' });
+
+          if (node) {
+            await models.ChainEventType.create({
+              id: req.body.object_id,
+              chain: req.body.chain_id,
+              event_name: 'transfer'
+            });
+          } else {
+            return next(new Error(Errors.InvalidChainEventId));
+          }
+        } else {
+          return next(new Error(Errors.InvalidChainEventId));
+        }
+      }
+      obj = { chain_id: p_entity, chain_event_type_id: req.body.event_name };
       break;
     }
     default:
       return next(new Error(Errors.InvalidNotificationCategory));
   }
-
   const subscription = await models.Subscription.create({
     subscriber_id: req.user.id,
     category_id: req.body.category,

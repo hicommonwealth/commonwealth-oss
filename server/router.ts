@@ -114,6 +114,7 @@ import getWebhooks from './routes/webhooks/getWebhooks';
 import ViewCountCache from './util/viewCountCache';
 import IdentityFetchCache from './util/identityFetchCache';
 import TokenBalanceCache from './util/tokenBalanceCache';
+import Erc20SubscriberHolder from './util/erc20SubscriberHolder';
 
 import bulkEntities from './routes/bulkEntities';
 import { getTokensFromLists } from './routes/getTokensFromLists';
@@ -126,7 +127,8 @@ function setupRouter(
   models,
   viewCountCache: ViewCountCache,
   identityFetchCache: IdentityFetchCache,
-  tokenBalanceCache: TokenBalanceCache
+  tokenBalanceCache: TokenBalanceCache,
+  erc20SubscriberHolder: Erc20SubscriberHolder
 ) {
   const router = express.Router();
   router.get('/status', status.bind(this, models));
@@ -178,7 +180,7 @@ function setupRouter(
   router.post('/updateCommunity', passport.authenticate('jwt', { session: false }), updateCommunity.bind(this, models));
   router.get('/communityStats', passport.authenticate('jwt', { session: false }), communityStats.bind(this, models));
   router.get('/getTokensFromLists', getTokensFromLists.bind(this, models, tokenBalanceCache));
-  router.get('/getTokenForum', getTokenForum.bind(this, models, tokenBalanceCache));
+  router.get('/getTokenForum', getTokenForum.bind(this, models, erc20SubscriberHolder, tokenBalanceCache));
 
   // offchain threads
   // TODO: Change to POST /thread
