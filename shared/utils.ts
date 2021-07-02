@@ -153,3 +153,5 @@ export function formatAddressShort(address: string, chain?: string, includeEllip
     return `${address.slice(0, 4)}${includeEllipsis ? '…' : ''}`;
   }
 }
+
+export const MAGIC_PUBLISHABLE_KEY = 'pk_test_436D33AFC319E080';
