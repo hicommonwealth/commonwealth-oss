@@ -1,18 +1,39 @@
 import {
   ITXModalData,
-  TransactionStatus,
   NodeInfo,
   IChainModule,
+  TransactionStatus,
   ITXData,
 } from 'models';
-import * as m from 'mithril';
+import m from 'mithril';
+import _ from 'lodash';
 import { ApiStatus, IApp } from 'state';
 import moment from 'moment';
-import { CosmosApi } from 'adapters/chain/cosmos/api';
 import { BlocktimeHelper } from 'helpers';
 import BN from 'bn.js';
 import { EventEmitter } from 'events';
-import { CosmosToken } from 'adapters/chain/cosmos/types';
+import { CosmosToken } from 'controllers/chain/cosmos/types';
+
+import {
+  makeStdTx,
+  StdTx,
+  StdFee,
+  BroadcastTxResult,
+  isBroadcastTxFailure,
+  AuthExtension,
+  GovExtension,
+  LcdClient,
+  makeSignDoc,
+  Msg,
+  setupAuthExtension,
+  setupGovExtension,
+  setupStakingExtension,
+  setupBankExtension,
+  setupSupplyExtension,
+  BankExtension,
+  SupplyExtension,
+  StakingExtension
+} from '@cosmjs/launchpad';
 import { CosmosAccount } from './account';
 
 export interface ICosmosTXData extends ITXData {
@@ -24,16 +45,20 @@ export interface ICosmosTXData extends ITXData {
   gas: number;
 }
 
-class CosmosChain implements IChainModule<CosmosToken, CosmosAccount> {
-  private _api: CosmosApi;
-  public get api(): CosmosApi {
-    return this._api;
-  }
+export type CosmosApiType = LcdClient
+  & StakingExtension
+  & AuthExtension
+  & GovExtension
+  & BankExtension
+  & SupplyExtension;
 
-  private _addressPrefix: string;
-  public get addressPrefix() {
-    return this._addressPrefix;
-  }
+class CosmosChain implements IChainModule<CosmosToken, CosmosAccount> {
+  private _url: string;
+  public get url() { return this._url; }
+  private _api: CosmosApiType;
+  public get api() { return this._api; }
+
+  private _blockSubscription: NodeJS.Timeout;
 
   // TODO: rename this something like "bankDenom" or "gasDenom" or "masterDenom"
   private _denom: string;
@@ -47,17 +72,16 @@ class CosmosChain implements IChainModule<CosmosToken, CosmosAccount> {
     return this._chainId;
   }
 
-  private _staked: number;
-  public get staked(): number {
+  private _staked: CosmosToken;
+  public get staked(): CosmosToken {
     return this._staked;
   }
 
   private _app: IApp;
   public get app() { return this._app; }
 
-  constructor(app: IApp, addressPrefix: string) {
+  constructor(app: IApp) {
     this._app = app;
-    this._addressPrefix = addressPrefix;
   }
 
   public coins(n: number | BN, inDollars?: boolean) {
@@ -72,36 +96,87 @@ class CosmosChain implements IChainModule<CosmosToken, CosmosAccount> {
     // on its own, so you need to configure a reverse-proxy server (I did it with nginx)
     // that forwards the requests to it, and adds the header 'Access-Control-Allow-Origin: *'
     /* eslint-disable prefer-template */
-    const wsUrl = (node.url.indexOf('localhost') !== -1 || node.url.indexOf('127.0.0.1') !== -1)
-      ? ('ws://' + node.url.replace('ws://', '').replace('wss://', '').split(':')[0] + ':26657/websocket')
-      : ('wss://' + node.url.replace('ws://', '').replace('wss://', '').split(':')[0] + ':36657/websocket');
-    const restUrl = (node.url.indexOf('localhost') !== -1 || node.url.indexOf('127.0.0.1') !== -1)
-      ? ('http://' + node.url.replace('ws://', '').replace('wss://', '').split(':')[0] + ':1318')
-      : ('https://' + node.url.replace('ws://', '').replace('wss://', '').split(':')[0] + ':1318');
+    this._url = node.url;
 
-    console.log(`Starting Tendermint REST API at ${restUrl} and Websocket API on ${wsUrl}...`);
+    console.log(`Starting REST API at ${this._url}...`);
 
-    this._api = new CosmosApi(wsUrl, restUrl);
+    console.log('cosmjs api');
+    // TODO: configure broadcast mode
+    this._api = LcdClient.withExtensions(
+      { apiUrl: this._url },
+      setupAuthExtension,
+      setupGovExtension,
+      setupStakingExtension,
+      setupBankExtension,
+      setupSupplyExtension,
+    );
     if (this.app.chain.networkStatus === ApiStatus.Disconnected) {
       this.app.chain.networkStatus = ApiStatus.Connecting;
     }
-    await this._api.init((header) => {
-      this._blocktimeHelper.stamp(moment(header.time));
-      this.app.chain.block.height = +header.height;
-      m.redraw();
-    });
+    const nodeInfo = await this._api.nodeInfo();
+    this._chainId = nodeInfo.node_info.network;
+    console.log(`chain id: ${this._chainId}`);
     this.app.chain.networkStatus = ApiStatus.Connected;
-    const { bonded_tokens } = await this._api.query.pool();
-    this._staked = +bonded_tokens;
-    const { bond_denom } = await this._api.query.stakingParameters();
-    this._denom = bond_denom;          // uatom
-    this._chainId = this._api.chainId; // cosmoshub-2
+
+    // Poll for new block immediately and then every 2s
+    const fetchBlockJob = async () => {
+      const block = await this._api.blocksLatest();
+      const height = +block.block.header.height;
+      const time = moment(block.block.header.time);
+      if (height !== this.app.chain.block.height) {
+        this._blocktimeHelper.stamp(moment(time));
+        this.app.chain.block.height = height;
+        m.redraw();
+      }
+    };
+    await fetchBlockJob();
+    this._blockSubscription = setInterval(fetchBlockJob, 2000);
+
+    const { result: { bonded_tokens } } = await this._api.staking.pool();
+    this._staked = this.coins(new BN(bonded_tokens));
+    const { result: { bond_denom } } = await this._api.staking.parameters();
+    this._denom = bond_denom;
     m.redraw();
   }
 
   public async deinit(): Promise<void> {
     this.app.chain.networkStatus = ApiStatus.Disconnected;
-    if (this._api) this._api.deinit();
+    if (this._blockSubscription) {
+      clearInterval(this._blockSubscription);
+    }
+  }
+
+  private async _simulate(msg: Msg, memo: string): Promise<number> {
+    // TODO
+    return 180000;
+  }
+
+  public async tx(
+    txName: string,
+    senderAddress: string,
+    args: object,
+    memo: string = '',
+    gas?: number,
+    gasDenom: string = 'uatom',
+  ) {
+    const msg: Msg = {
+      type: txName,
+      value: args,
+    };
+
+    // estimate the needed gas amount
+    if (!gas) {
+      gas = await this._simulate(msg, memo);
+    }
+
+    // generate unsigned version for CLI
+    // TODO: test!
+    const result = await this._api.auth.account(senderAddress);
+    const { sequence, account_number: accountNumber } = result.result.value;
+    const DEFAULT_GAS_PRICE = [{ amount: (2.5e-8).toFixed(9), denom: gasDenom }];
+    const fee = { amount: DEFAULT_GAS_PRICE, gas: `${gas}` };
+    const messageToSign = makeSignDoc([ msg ], fee, this.chainId, memo, sequence, accountNumber);
+    return { msg, memo, fee, cmdData: { messageToSign, chainId: this.chainId, sequence, accountNumber, gas } };
   }
 
   public createTXModalData(
@@ -128,38 +203,55 @@ class CosmosChain implements IChainModule<CosmosToken, CosmosAccount> {
             sequence,
           };
         },
-        transact: (signature?, computedGas?: number): void => {
-          let signer;
-          if (signature) {
-            // create replacement signer that delivers signature as needed
-            signer = () => ({
-              signature: Buffer.from(signature.signature, 'base64'),
-              publicKey: Buffer.from(signature.pub_key.value, 'base64'),
-            });
-          } else {
-            signer = (author as CosmosAccount).getLedgerSigner();
-          }
+        transact: (signature?: string, computedGas?: number): void => {
           // perform transaction and coerce into compatible observable
-          txFunc(computedGas).then(({ msg, memo, cmdData: { gas } }) => {
-            return msg.send({ gas: `${gas}`, memo }, signer);
-          }).then(({ hash, sequence, included }) => {
-            events.emit(TransactionStatus.Ready.toString(), { hash });
-            // wait for transaction to process
-            return included();
-          }).then((txObj) => {
-            // TODO: is this necessarily success or can it fail?
-            console.log(txObj);
-            // TODO: add gas wanted/gas used to the modal?
-            events.emit(TransactionStatus.Success.toString(), {
-              blocknum: +txObj.height,
-              timestamp: moment(txObj.timestamp),
-              hash: '--', // TODO: fetch the hash value of the block rather than the tx
-            });
-          })
-            .catch((err) => {
-              console.error(err);
-              events.emit(TransactionStatus.Error.toString(), { err: err.message });
-            });
+          txFunc(computedGas).then(async ({ msg, memo, fee }) => {
+            let txResult: BroadcastTxResult;
+
+            // sign and make TX
+            try {
+              let stdTx: StdTx;
+              if (!signature) {
+                // create StdTx through API
+                stdTx = await author.client.sign([ msg as Msg ], fee as StdFee, memo);
+              } else {
+                // manually construct StdTx using signature
+                stdTx = makeStdTx(
+                  { memo, fee, msgs: [ msg ] },
+                  { signature, pub_key: author.pubKey },
+                );
+              }
+              txResult = await author.client.broadcastTx(stdTx);
+            } catch (e) {
+              events.emit(TransactionStatus.Error.toString(), { err: e.message });
+            }
+
+            // handle result of broadcast
+            if (isBroadcastTxFailure(txResult)) {
+              // TODO: test
+              events.emit(TransactionStatus.Error.toString(), { err: txResult.rawLog });
+              return;
+            }
+            try {
+              const indexedTx = await author.client.getTx(txResult.transactionHash);
+              const height = indexedTx.height;
+              const block = await author.client.getBlock(height);
+              events.emit(TransactionStatus.Success.toString(), {
+                blocknum: height,
+                timestamp: moment(block.header.time),
+                hash: block.id,
+              });
+            } catch (e) {
+              // TODO: failed to fetch TX from block, but successfully broadcast?
+              events.emit(TransactionStatus.Success.toString(), {
+                blocknum: this.app.chain.block.height,
+                timestamp: moment(),
+                hash: '--',
+              });
+            }
+          }).catch((err) => {
+            console.error(err);
+          });
         },
       }
     };
