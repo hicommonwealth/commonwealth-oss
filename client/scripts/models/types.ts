@@ -29,6 +29,8 @@ export enum ChainNetwork {
   Centrifuge = 'centrifuge',
   Cosmos = 'cosmos',
   Straightedge = 'straightedge',
+  Osmosis = 'osmosis',
+  Injective = 'injective',
   Ethereum = 'ethereum',
   NEAR = 'near',
   Moloch = 'moloch',
@@ -70,15 +72,6 @@ export enum OffchainThreadStage {
   Voting = 'voting',
   Passed = 'passed',
   Failed = 'failed',
-}
-
-export enum OffchainVoteOptions {
-  SUPPORT_2,
-  SUPPORT,
-  NEUTRAL_SUPPORT,
-  NEUTRAL_OPPOSE,
-  OPPOSE,
-  OPPOSE_2,
 }
 
 export enum TransactionStatus {

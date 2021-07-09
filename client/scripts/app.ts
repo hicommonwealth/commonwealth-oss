@@ -130,10 +130,12 @@ export async function deinitChainOrCommunity() {
     app.chain.networkStatus = ApiStatus.Disconnected;
     app.chain.deinitServer();
     await app.chain.deinit();
+    console.log('Finished deinitializing chain');
     app.chain = null;
   }
   if (app.community) {
     await app.community.deinit();
+    console.log('Finished deinitializing community');
     app.community = null;
   }
   app.user.setSelectedNode(null);
@@ -245,20 +247,13 @@ export async function selectNode(n?: NodeInfo, deferred = false): Promise<boolea
       './controllers/chain/substrate/main'
     )).default;
     newChain = new Substrate(n, app);
-  } else if (n.chain.network === ChainNetwork.Cosmos) {
+  } else if (n.chain.base === ChainBase.CosmosSDK) {
     const Cosmos = (await import(
       /* webpackMode: "lazy" */
       /* webpackChunkName: "cosmos-main" */
       './controllers/chain/cosmos/main'
     )).default;
     newChain = new Cosmos(n, app);
-  } else if (n.chain.network === ChainNetwork.Straightedge) {
-    const Straightedge = (await import(
-      /* webpackMode: "lazy" */
-      /* webpackChunkName: "straightedge-main" */
-      './controllers/chain/straightedge/main'
-    )).default;
-    newChain = new Straightedge(n, app);
   } else if (n.chain.network === ChainNetwork.Ethereum) {
     const Ethereum = (await import(
       /* webpackMode: "lazy" */
@@ -310,9 +305,14 @@ export async function selectNode(n?: NodeInfo, deferred = false): Promise<boolea
   const finalizeInitialization = await newChain.initServer();
 
   // If the user is still on the initializing node, finalize the
-  // initialization; otherwise, abort and return false
+  // initialization; otherwise, abort, deinit, and return false.
+  //
+  // Also make sure the state is sufficiently reset so that the
+  // next redraw cycle will reinitialize any needed chain.
   if (!finalizeInitialization) {
+    console.log('Chain loading aborted');
     app.chainPreloading = false;
+    app.chain = null;
     return false;
   } else {
     app.chain = newChain;
@@ -632,6 +632,10 @@ $(() => {
     // NEAR login
     '/:scope/finishNearLogin':    importRoute('views/pages/finish_near_login', { scoped: true }),
   });
+
+  const script = document.createElement('noscript');
+  m.render(script, m.trust('<iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KRWH69V" height="0" width="0" style="display:none;visibility:hidden"></iframe>'));
+  document.body.insertBefore(script, document.body.firstChild);
 
   // initialize construct-ui focus manager
   FocusManager.showFocusOnlyOnTab();
