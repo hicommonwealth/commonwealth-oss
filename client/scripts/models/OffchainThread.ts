@@ -67,7 +67,13 @@ class OffchainThread implements IUniqueId {
     });
     this.offchainVotes = votes;
   }
-  public async submitOffchainVote(chain: string, community: string, authorChain: string, address: string, option: string) {
+  public async submitOffchainVote(
+    chain: string,
+    community: string,
+    authorChain: string,
+    address: string,
+    option: OffchainVoteOptions
+  ) {
     const thread_id = this.id;
     return $.post(`${app.serverUrl()}/updateOffchainVote`, {
       thread_id,
@@ -80,7 +86,8 @@ class OffchainThread implements IUniqueId {
     }).then(() => {
       const vote = new OffchainVote({ address, author_chain: authorChain, thread_id, option });
       // remove any existing vote
-      const existingVoteIndex = this.offchainVotes.findIndex((v) => v.address === address && v.author_chain === authorChain);
+      const existingVoteIndex = this.offchainVotes
+        .findIndex((v) => v.address === address && v.author_chain === authorChain);
       if (existingVoteIndex !== -1) {
         this.offchainVotes.splice(existingVoteIndex, 1);
       } else {
@@ -179,6 +186,33 @@ class OffchainThread implements IUniqueId {
     this.offchainVotingNumVotes = offchainVotingNumVotes;
     this.offchainVotes = offchainVotes || [];
     this.lastEdited = lastEdited;
+  }
+
+  public static fromJSON(thread) {
+    const attachments = thread.OffchainAttachments
+      ? thread.OffchainAttachments.map((a) => new OffchainAttachment(a.url, a.description))
+      : [];
+    return new OffchainThread({
+      author: thread.Address.address,
+      title: decodeURIComponent(thread.title),
+      attachments,
+      id: thread.id,
+      createdAt: moment(thread.created_at),
+      topic: thread.topic,
+      kind: thread.kind,
+      stage: thread.stage,
+      versionHistory: thread.version_history,
+      community: thread.community,
+      chain: thread.chain,
+      readOnly: thread.read_only,
+      body: decodeURIComponent(thread.body),
+      plaintext: thread.plaintext,
+      url: thread.url,
+      authorChain: thread.Address.chain,
+      pinned: thread.pinned,
+      collaborators: thread.collaborators,
+      chainEntities: thread.chain_entities,
+    });
   }
 }
 

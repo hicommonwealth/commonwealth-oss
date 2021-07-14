@@ -1,14 +1,12 @@
 import 'pages/profile.scss';
 
 import m from 'mithril';
-import moment from 'moment';
 import _ from 'lodash';
 import mixpanel from 'mixpanel-browser';
-import $ from 'jquery';
 import Web3 from 'web3';
 
 import app from 'state';
-import { OffchainThread, OffchainComment, OffchainAttachment, Profile, ChainBase } from 'models';
+import { OffchainThread, OffchainComment, Profile, ChainBase, AddressInfo } from 'models';
 
 import Sublayout from 'views/sublayout';
 import PageNotFound from 'views/pages/404';
@@ -16,128 +14,55 @@ import PageLoading from 'views/pages/loading';
 import Tabs from 'views/components/widgets/tabs';
 
 import { decodeAddress, checkAddress, encodeAddress } from '@polkadot/util-crypto';
-import { setActiveAccount } from 'controllers/app/login';
 import ProfileHeader from './profile_header';
 import ProfileContent from './profile_content';
 import ProfileBio from './profile_bio';
 import ProfileBanner from './profile_banner';
+import AddressSwapper from '../../components/addresses/address_swapper';
 
-const commentModelFromServer = (comment) => {
-  const attachments = comment.OffchainAttachments
-    ? comment.OffchainAttachments.map((a) => new OffchainAttachment(a.url, a.description))
-    : [];
-  let proposal;
-  try {
-    const proposalSplit = decodeURIComponent(comment.root_id).split(/-|_/);
-    if (proposalSplit[0] === 'discussion') {
-      proposal = new OffchainThread({
-        author: '',
-        title: '',
-        attachments: null,
-        id: Number(proposalSplit[1]),
-        createdAt: comment.created_at,
-        topic: null,
-        kind: null,
-        stage: null,
-        community: comment.community,
-        chain: comment.chain,
-        versionHistory: null,
-        readOnly: null,
-      });
-    } else {
-      proposal = {
-        chain: comment.chain,
-        community: comment.community,
-        slug: proposalSplit[0],
-        identifier: proposalSplit[1],
-      };
-    }
-  } catch (e) {
-    proposal = null;
-  }
-  return new OffchainComment({
-    chain: comment.chain,
-    author: comment?.Address?.address || comment.author,
-    text: decodeURIComponent(comment.text),
-    plaintext: comment.plaintext,
-    versionHistory: comment.version_history,
-    attachments,
-    proposal,
-    id: comment.id,
-    createdAt: moment(comment.created_at),
-    childComments: comment.child_comments,
-    rootProposal: comment.root_id,
-    parentComment: comment.parent_id,
-    community: comment.community,
-    authorChain: comment?.Address?.chain || comment.authorChain,
-    lastEdited: null,
-  });
-};
-
-const threadModelFromServer = (thread) => {
-  const attachments = thread.OffchainAttachments
-    ? thread.OffchainAttachments.map((a) => new OffchainAttachment(a.url, a.description))
-    : [];
-  return new OffchainThread({
-    author: thread.Address.address,
-    title: decodeURIComponent(thread.title),
-    attachments,
-    id: thread.id,
-    createdAt: moment(thread.created_at),
-    topic: thread.topic,
-    kind: thread.kind,
-    stage: thread.stage,
-    versionHistory: thread.version_history,
-    community: thread.community,
-    chain: thread.chain,
-    readOnly: thread.read_only,
-    body: decodeURIComponent(thread.body),
-    plaintext: thread.plaintext,
-    url: thread.url,
-    authorChain: thread.Address.chain,
-    pinned: thread.pinned,
-    collaborators: thread.collaborators,
-    chainEntities: thread.chain_entities,
-  });
-};
-
-const getProfileStatus = (account) => {
+const getProfileStatus = (chain: string, address: string, id?: number): {
+  onOwnProfile: boolean,
+  onLinkedProfile: boolean,
+  displayBanner: boolean,
+  currentAddressInfo?: AddressInfo,
+} => {
+  const isAddressEqual = (base: ChainBase, address1: string, address2: string): boolean => {
+    return base === ChainBase.Substrate
+      ? AddressSwapper({
+        address: address1, currentPrefix: 42
+      }) === AddressSwapper({
+        address: address2, currentPrefix: 42
+      })
+      : address1 === address2;
+  };
   const onOwnProfile = typeof app.user.activeAccount?.chain === 'string'
-    ? (account.chain === app.user.activeAccount?.chain && account.address === app.user.activeAccount?.address)
-    : (account.chain === app.user.activeAccount?.chain?.id && account.address === app.user.activeAccount?.address);
-  const onLinkedProfile = !onOwnProfile && app.user.activeAccounts.length > 0
-    && app.user.activeAccounts.filter((account_) => {
-      return app.user.getRoleInCommunity({
-        account: account_,
-        chain: app.activeChainId(),
-      });
-    }).filter((account_) => {
-      return account_.address === account.address;
-    }).length > 0;
+    ? (chain === app.user.activeAccount?.chain && address === app.user.activeAccount?.address)
+    : (chain === app.user.activeAccount?.chain?.id && isAddressEqual(
+      app.user.activeAccount.chainBase, address, app.user.activeAccount.address
+    ));
+  const onLinkedProfile = !onOwnProfile && !!app.user.activeAccounts.find((account) => {
+    return app.user.getRoleInCommunity({
+      account,
+      chain: app.activeChainId(),
+    }) && isAddressEqual(app.chain.base, account.address, address);
+  });
+
+  console.log(`onOwnProfile: ${onOwnProfile}, onLinkedProfile: ${onLinkedProfile}`);
 
   // if the profile that we are visiting is in app.activeAddresses() but not the current active address,
   // then display the ProfileBanner
   // TODO: display the banner if the current address is in app.activeAddresses() and *is* a member of the
   // community (this will require alternate copy on the banner)
-  let isUnjoinedJoinableAddress;
-  let currentAddressInfo;
+  let isUnjoinedJoinableAddress: boolean = false;
+  let currentAddressInfo: AddressInfo | undefined;
   if (!onOwnProfile && !onLinkedProfile) {
     const communityOptions = { chain: app.activeChainId(), community: app.activeCommunityId() };
-    const communityRoles = app.user.getAllRolesInCommunity(communityOptions);
-    const joinableAddresses = app.user.getJoinableAddresses(communityOptions);
-    const unjoinedJoinableAddresses = (joinableAddresses.length > communityRoles.length)
-      ? joinableAddresses.filter((addr) => {
-        return communityRoles.filter((role) => {
-          return role.address_id === addr.id;
-        }).length === 0;
-      })
-      : [];
-    const currentAddressInfoArray = unjoinedJoinableAddresses.filter((addr) => {
-      return addr.id === account.id;
-    });
-    isUnjoinedJoinableAddress = currentAddressInfoArray.length > 0;
-    if (isUnjoinedJoinableAddress) {
-      currentAddressInfo = currentAddressInfoArray[0];
+    const communityRoles = app.user.getAllRolesInCommunity(communityOptions); // already joined
+    const unjoinedJoinableAddresses = app.user.getJoinableAddresses(communityOptions)
+      .filter((addr) => !communityRoles.find((role) => role.address_id === addr.id));
+    currentAddressInfo = id && unjoinedJoinableAddresses.find((addr) => addr.id === id);
+    if (currentAddressInfo) {
+      isUnjoinedJoinableAddress = true;
     }
   }
 
@@ -156,24 +81,29 @@ export enum UserContent {
 }
 
 interface IProfilePageState {
-  account;
+  profile: Profile;
   threads: OffchainThread[];
   comments: OffchainComment<any>[];
+  addressId?: number;
   initialized: boolean;
   loaded: boolean;
   loading: boolean;
   refreshProfile: boolean;
 }
 
+const resetProfileState = (vnode: m.Vnode<{ address: string, setIdentity?: boolean }, IProfilePageState>) => {
+  vnode.state.profile = null;
+  vnode.state.loaded = false;
+  vnode.state.loading = false;
+  vnode.state.addressId = undefined;
+  vnode.state.threads = [];
+  vnode.state.comments = [];
+  vnode.state.refreshProfile = false;
+};
+
 const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProfilePageState> = {
   oninit: (vnode) => {
-    vnode.state.account = null;
-    vnode.state.initialized = false;
-    vnode.state.loaded = false;
-    vnode.state.loading = false;
-    vnode.state.threads = [];
-    vnode.state.comments = [];
-    vnode.state.refreshProfile = false;
+    resetProfileState(vnode);
 
     const chain = (m.route.param('base'))
       ? m.route.param('base')
@@ -193,6 +123,7 @@ const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProf
           m.route.set(`/${m.route.param('scope')}/account/${encoded}${baseSuffix ? `?base=${baseSuffix}` : ''}`);
         } catch (e) {
           // do nothing if can't encode address
+          console.error(`Invalid substrate address: ${address}`);
         }
       }
     } else if (chainInfo?.base === ChainBase.Ethereum) {
@@ -204,6 +135,7 @@ const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProf
           m.route.set(`/${m.route.param('scope')}/account/${checksumAddress}${baseSuffix ? `?base=${baseSuffix}` : ''}`);
         } catch (e) {
           // do nothing if can't get checksumAddress
+          console.error(`Can't get checksum address for: ${address}`);
         }
       }
     }
@@ -212,6 +144,11 @@ const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProf
     mixpanel.track('PageVisit', { 'Page Name': 'LoginPage' });
   },
   view: (vnode) => {
+    // Hack: if you're on a profile page and use the login selector to `m.route.set` to a new profile page,
+    //   we need to reset the current page's state in order to load the new account's data.
+    if (vnode.state.profile && vnode.attrs.address !== vnode.state.profile.address && !vnode.state.loading) {
+      resetProfileState(vnode);
+    }
     const loadProfile = async () => {
       const chain = (m.route.param('base'))
         ? m.route.param('base')
@@ -230,132 +167,39 @@ const ProfilePage: m.Component<{ address: string, setIdentity?: boolean }, IProf
         return;
       }
       vnode.state.loading = true;
-      vnode.state.initialized = true;
-      try {
-        const response = await $.ajax({
-          url: `${app.serverUrl()}/profile`,
-          type: 'GET',
-          data: {
-            address,
-            chain,
-            jwt: app.user.jwt,
-          },
-        });
-
-        const { result } = response;
-        vnode.state.loaded = true;
-        vnode.state.loading = false;
-        const a = result.account;
-        const profile = new Profile(a.chain, a.address);
-        if (a.OffchainProfile) {
-          const profileData = JSON.parse(a.OffchainProfile.data);
-          // ignore off-chain name if substrate id exists
-          if (a.OffchainProfile.identity) {
-            profile.initializeWithChain(
-              a.OffchainProfile.identity,
-              profileData?.headline,
-              profileData?.bio,
-              profileData?.avatarUrl,
-              a.OffchainProfile.judgements,
-              a.last_active,
-              a.is_councillor,
-              a.is_validator,
-            );
-          } else {
-            profile.initialize(
-              profileData?.name,
-              profileData?.headline,
-              profileData?.bio,
-              profileData?.avatarUrl,
-              a.last_active,
-              a.is_councillor,
-              a.is_validator
-            );
-          }
-        } else {
-          profile.initializeEmpty();
-        }
-        const account = {
-          profile,
-          chain: a.chain,
-          address: a.address,
-          id: a.id,
-          name: a.name,
-          user_id: a.user_id,
-        };
-        vnode.state.account = account;
-        vnode.state.threads = result.threads.map((t) => threadModelFromServer(t));
-        vnode.state.comments = result.comments.map((c) => commentModelFromServer(c));
-        m.redraw();
-      } catch (err) {
-        console.log(err);
-        // for certain chains, display addresses not in db if formatted properly
-        if (chainInfo?.base === ChainBase.Substrate) {
-          try {
-            decodeAddress(address);
-            vnode.state.account = {
-              profile: null,
-              chain,
-              address,
-              id: null,
-              name: null,
-              user_id: null,
-            };
-          } catch (e) {
-            // do nothing if can't decode
-          }
-        } else if (chainInfo?.base === ChainBase.Ethereum) {
-          if (Web3.utils.checkAddressChecksum(address)) {
-            vnode.state.account = {
-              profile: null,
-              chain,
-              address,
-              id: null,
-              name: null,
-              user_id: null,
-            };
-          }
-        } else if (chainInfo?.base === ChainBase.CosmosSDK) {
-          // TODO
-        }
-        vnode.state.loaded = true;
-        vnode.state.loading = false;
-        m.redraw();
-        if (!vnode.state.account)
-          throw new Error((err.responseJSON && err.responseJSON.error)
-            ? err.responseJSON.error
-            : 'Failed to find profile');
-      }
+      const { addressId, profile, threads, comments } = await app.profiles.getProfileWithActivity(chain, address);
+      vnode.state.profile = profile;
+      vnode.state.threads = threads;
+      vnode.state.comments = comments;
+      vnode.state.addressId = addressId;
+      vnode.state.loaded = true;
+      vnode.state.loading = false;
+      m.redraw();
     };
 
     const { setIdentity } = vnode.attrs;
-    const { account, loaded, loading, refreshProfile } = vnode.state;
+    const { profile, loaded, loading, refreshProfile } = vnode.state;
     if (!loading && !loaded) {
       loadProfile();
     }
-    if (account && account.address !== vnode.attrs.address) {
-      vnode.state.loaded = false;
-      loadProfile();
-    }
-    if (loading) return m(PageLoading, { showNewProposalButton: true });
-    if (!account && !vnode.state.initialized) {
+    if (loading || !app.chain?.accounts) return m(PageLoading, { showNewProposalButton: true });
+    if (!profile) {
       return m(PageNotFound, { message: 'Invalid address provided' });
     } else if (!account) {
       return m(PageLoading, { showNewProposalButton: true });
     }
 
-    const { onOwnProfile, onLinkedProfile, displayBanner, currentAddressInfo } = getProfileStatus(account);
+    const account = app.chain.accounts.get(profile.address);
+
+    const { onOwnProfile, onLinkedProfile, displayBanner, currentAddressInfo } = getProfileStatus(
+      profile.chain,
+      profile.address,
+      vnode.state.addressId,
+    );
 
     if (refreshProfile) {
-      loadProfile();
       vnode.state.refreshProfile = false;
-      if (onOwnProfile) {
-        setActiveAccount(account).then(() => {
-          m.redraw();
-        });
-      } else {
-        m.redraw();
-      }
+      loadProfile();
     }
 
     // TODO: search for cosmos proposals, if ChainBase is Cosmos
