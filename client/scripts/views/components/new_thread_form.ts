@@ -11,6 +11,7 @@ import {
   Callout, Tabs, TabItem, Form, FormGroup, Input, Button,
   Icon, Icons, List, ListItem, Tag,
 } from 'construct-ui';
+import web3 from 'web3';
 
 import app from 'state';
 
@@ -439,6 +440,7 @@ export const NewThreadForm: m.Component<{
 
     const discussionDrafts = app.user.discussionDrafts.store.getByCommunity(app.activeId());
     const { fromDraft, postType, saving } = vnode.state;
+    const isAdmin = app.user.isAdminOfEntity({ chain: app.activeChainId(), community: app.activeCommunityId() });
 
     return m('.NewThreadForm', {
       class: `${postType === PostType.Link ? 'link-post' : ''} `
@@ -621,7 +623,10 @@ export const NewThreadForm: m.Component<{
                 defaultTopic: (vnode.state.activeTopic === false || vnode.state.activeTopic)
                   ? vnode.state.activeTopic
                   : localStorage.getItem(`${app.activeId()}-active-topic`),
-                topics: app.topics.getByCommunity(app.activeId()),
+                topics: app.topics && app.topics.getByCommunity(app.activeId()).filter((t) => {
+                  // @To-do // Change this because right now the forum threshold is hardcoded to zero
+                  return isAdmin || (app.chain && web3.utils.toBN(0).gte(t.token_threshold));
+                }),
                 featuredTopics: app.topics.getByCommunity(app.activeId())
                   .filter((ele) => activeEntityInfo.featuredTopics.includes(`${ele.id}`)),
                 updateFormData: updateTopicState,

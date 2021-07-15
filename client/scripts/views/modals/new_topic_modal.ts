@@ -4,20 +4,22 @@ import m from 'mithril';
 import app from 'state';
 import $ from 'jquery';
 import { Button, Input, Form, FormGroup, FormLabel } from 'construct-ui';
-
+import BN from 'bn.js';
 import { confirmationModalWithText } from 'views/modals/confirm_modal';
 import { CompactModalExitButton } from 'views/modal';
-
+import { tokensToTokenBaseUnits } from 'helpers';
 interface INewTopicModalForm {
   id: number,
   name: string,
   description: string,
+  token_threshold: string
 }
 
 const NewTopicModal: m.Component<{
   id: number,
   name: string,
   description: string,
+  token_threshold: string
 }, {
   error: any,
   form: INewTopicModalForm,
@@ -25,9 +27,9 @@ const NewTopicModal: m.Component<{
 }> = {
   view: (vnode) => {
     if (!app.user.isAdminOfEntity({ chain: app.activeChainId(), community: app.activeCommunityId() })) return null;
-    const { id, name, description } = vnode.attrs;
+    const { id, name, description, token_threshold } = vnode.attrs;
     if (!vnode.state.form) {
-      vnode.state.form = { id, name, description };
+      vnode.state.form = { id, name, description, token_threshold };
     }
 
     return m('.NewTopicModal', [
@@ -67,6 +69,22 @@ const NewTopicModal: m.Component<{
               }
             }),
           ]),
+          m(FormGroup, [
+            m(FormLabel, { for: 'token_threshold' }, `Number of tokens needed to post (${app.chain.meta.chain.symbol})`),
+            m(Input, {
+              title: 'Token threshold',
+              class: 'topic-form-token-threshold',
+              tabindex: 2,
+              defaultValue: '0',
+              value: vnode.state.form.token_threshold,
+              oninput: (e) => {
+                // restrict it to numerical input
+                if (e.target.value === '' || /^\d+\.?\d*$/.test(e.target.value)) {
+                  vnode.state.form.token_threshold = (e.target as any).value;
+                }
+              }
+            })
+          ]),
           m(Button, {
             intent: 'primary',
             disabled: vnode.state.saving,
@@ -76,6 +94,8 @@ const NewTopicModal: m.Component<{
               if (!vnode.state.form.name.trim()) return;
               app.topics.add(
                 vnode.state.form.name, vnode.state.form.description, null,
+                tokensToTokenBaseUnits(vnode.state.form.token_threshold ? vnode.state.form.token_threshold : '0', 
+                  app.chain.meta.chain.decimals ? app.chain.meta.chain.decimals : 18)
               ).then(() => {
                 vnode.state.saving = false;
                 m.redraw();

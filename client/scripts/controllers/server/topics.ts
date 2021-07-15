@@ -4,9 +4,14 @@ import _ from 'lodash';
 import { TopicStore } from 'stores';
 import { OffchainTopic } from 'models';
 import app from 'state';
+import BN from 'bn.js';
 
 const modelFromServer = (topic) => {
-  return new OffchainTopic(topic.name, topic.id, topic.description, topic.telegram, topic.community_id, topic.chain_id);
+  if (topic.token_threshold !== null) {
+    return new OffchainTopic(topic.name, topic.id, topic.description, topic.telegram, topic.community_id, topic.chain_id, new BN(topic.token_threshold));
+  } else {
+    return new OffchainTopic(topic.name, topic.id, topic.description, topic.telegram, topic.community_id, topic.chain_id);
+  }
 };
 
 class TopicsController {
@@ -47,6 +52,22 @@ class TopicsController {
     }
   }
 
+  public async setTopicThreshold(topic: OffchainTopic, token_threshold: string) {
+    try {
+      const response = await $.post(`${app.serverUrl()}/setTopicThreshold`, {
+        'topic_id': topic.id,
+        'token_threshold': token_threshold,
+        'jwt': app.user.jwt
+      });
+      return response.status;
+    } catch (err) {
+      console.log('Failed to edit topic');
+      throw new Error((err.responseJSON && err.responseJSON.error)
+        ? err.responseJSON.error
+        : 'Failed to edit topic');
+    }
+  }
+
   public async update(threadId: number, topicName: string, topicId?: number) {
     try {
       const response = await $.post(`${app.serverUrl()}/updateTopics`, {
@@ -70,7 +91,7 @@ class TopicsController {
     }
   }
 
-  public async add(name: string, description: string, telegram: string) {
+  public async add(name: string, description: string, telegram: string, token_threshold: string = '0') {
     try {
       const chainOrCommObj = (app.activeChainId())
         ? { 'chain': app.activeChainId() }
@@ -82,6 +103,7 @@ class TopicsController {
         'description': description,
         'telegram': telegram,
         'jwt': app.user.jwt,
+        'token_threshold': token_threshold
       });
       const result = modelFromServer(response.result);
       if (this._store.getById(result.id)) {

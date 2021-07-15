@@ -30,13 +30,14 @@ class ChainInfo {
   public members: RoleInfo[];
   public type: string;
   public readonly ss58Prefix: string;
+  public decimals: number;
   public substrateSpec: RegisteredTypes;
 
   constructor({
     id, network, symbol, name, iconUrl, description, website, discord, element, telegram, github,
     stagesEnabled, additionalStages,
     customDomain, blockExplorerIds, collapsedOnHomepage, featuredTopics, topics, adminsAndMods,
-    base, ss58_prefix, type, substrateSpec
+    base, ss58_prefix, type, decimals, substrateSpec
   }) {
     this.id = id;
     this.network = network;
@@ -60,6 +61,7 @@ class ChainInfo {
     this.adminsAndMods = adminsAndMods || [];
     this.type = type;
     this.ss58Prefix = ss58_prefix;
+    this.decimals = decimals;
     this.substrateSpec = substrateSpec;
   }
 
@@ -86,6 +88,7 @@ class ChainInfo {
     base,
     ss58_prefix,
     type,
+    decimals,
     substrate_spec,
   }) {
     let blockExplorerIdsParsed;
@@ -118,6 +121,7 @@ class ChainInfo {
       base,
       ss58_prefix,
       type,
+      decimals: parseInt(decimals, 10),
       substrateSpec: substrate_spec,
     });
   }

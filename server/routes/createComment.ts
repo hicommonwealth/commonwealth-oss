@@ -41,6 +41,31 @@ const createComment = async (
 
   const { parent_id, root_id, text } = req.body;
 
+  if (chain && chain.type === 'token') {
+    // skip check for admins
+    const isAdmin = await models.Role.findAll({
+      where: {
+        address_id: author.id,
+        chain_id: chain.id,
+        permission: ['admin'],
+      },
+    });
+    if (isAdmin.length === 0) {
+      try {
+        const stage = root_id.substring(0, root_id.indexOf('_'));
+        const topic_id = root_id.substring(root_id.indexOf('_') + 1);
+        const thread = await models.OffchainThread.findOne({ where:{ stage, id: topic_id } });
+        const threshold = (await models.OffchainTopic.findOne({ where: { id: thread.topic_id } })).token_threshold;
+        const tokenBalance = await tokenBalanceCache.getBalance(chain.id, req.body.address);
+
+        if (threshold && tokenBalance.lt(threshold)) return next(new Error(Errors.InsufficientTokenBalance));
+      } catch (e) {
+        log.error(`hasToken failed: ${e.message}`);
+        return next(new Error(Errors.CouldNotFetchTokenBalance));
+      }
+    }
+  }
+
   const plaintext = (() => {
     try {
       return renderQuillDeltaToText(JSON.parse(decodeURIComponent(text)));

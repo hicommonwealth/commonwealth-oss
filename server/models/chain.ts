@@ -31,6 +31,7 @@ export interface ChainAttributes {
   additionalStages: string;
   customDomain: string;
   type: string;
+  decimals?: number;
   substrate_spec: RegisteredTypes;
 
   // associations
@@ -79,6 +80,7 @@ export default (
     blockExplorerIds: { type: dataTypes.STRING, allowNull: true, },
     collapsed_on_homepage: { type: dataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     type: { type: dataTypes.STRING, allowNull: false },
+    decimals: { type: dataTypes.INTEGER, allowNull: true },
     substrate_spec: { type: dataTypes.JSONB, allowNull: true },
   }, {
     timestamps: false,

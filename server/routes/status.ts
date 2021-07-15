@@ -2,9 +2,12 @@ import { QueryTypes } from 'sequelize';
 import jwt from 'jsonwebtoken';
 import _ from 'lodash';
 import { Request, Response, NextFunction } from 'express';
-import { JWT_SECRET, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from '../config';
+import Web3 from 'web3';
+import { providers } from 'ethers';
+import { JWT_SECRET, INFURA_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from '../config';
 import { factory, formatFilename } from '../../shared/logging';
 import '../types';
+import { Erc20DetailedFactory } from '../../eth/types/Erc20DetailedFactory';
 
 const log = factory.getLogger(formatFilename(__filename));
 
