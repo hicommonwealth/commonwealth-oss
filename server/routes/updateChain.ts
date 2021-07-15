@@ -67,7 +67,10 @@ const updateChain = async (models, req: Request, res: Response, next: NextFuncti
   chain.element = element;
   chain.telegram = telegram;
   chain.github = github;
-  chain.customDomain = customDomain;
+  // IMPORTANT: Under our current security policy, custom domains must be set by trusted
+  // administrators only. Otherwise an attacker could configure a custom domain and
+  // use the code they run to steal login tokens for arbitrary users.
+  // DO NOT USE: community.customDomain = customDomain;
   if (req.body['featured_topics[]']) chain.featured_topics = req.body['featured_topics[]'];
 
   await chain.save();

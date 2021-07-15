@@ -65,7 +65,10 @@ const updateCommunity = async (models, req: Request, res: Response, next: NextFu
   community.element = element;
   community.telegram = telegram;
   community.github = github;
-  community.customDomain = customDomain;
+  // IMPORTANT: Under our current security policy, custom domains must be set by trusted
+  // administrators only. Otherwise an attacker could configure a custom domain and
+  // use the code they run to steal login tokens for arbitrary users.
+  // DO NOT USE: community.customDomain = customDomain;
   community.invitesEnabled = invites || false;
   community.privacyEnabled = privacy || false;
   await community.save();
